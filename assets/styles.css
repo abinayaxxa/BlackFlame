@@ -1,0 +1,273 @@
+/* Black Flame - Family Union Modern UI/UX Stylesheet */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --bf-bg: #0b0f19;
+  --bf-surface: #111827;
+  --bf-surface-card: #182234;
+  --bf-surface-hover: #1e293b;
+  --bf-border: #293548;
+  --bf-flame-primary: #ff6b00;
+  --bf-flame-accent: #f59e0b;
+  --bf-flame-glow: rgba(255, 107, 0, 0.25);
+  
+  --bf-green: #10b981;
+  --bf-green-bg: rgba(16, 185, 129, 0.12);
+  --bf-green-border: #059669;
+  
+  --bf-yellow: #f59e0b;
+  --bf-yellow-bg: rgba(245, 158, 11, 0.12);
+  --bf-yellow-border: #d97706;
+  
+  --bf-red: #ef4444;
+  --bf-red-bg: rgba(239, 68, 68, 0.12);
+  --bf-red-border: #dc2626;
+
+  --bf-text-main: #f8fafc;
+  --bf-text-muted: #94a3b8;
+  --bf-font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+body, .stApp {
+  font-family: var(--bf-font-family) !important;
+  background-color: var(--bf-bg) !important;
+  color: var(--bf-text-main) !important;
+}
+
+/* Header & Brand Container */
+.bf-brand-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(135deg, rgba(20, 28, 44, 0.85) 0%, rgba(13, 17, 27, 0.95) 100%);
+  border: 1px solid var(--bf-border);
+  border-left: 5px solid var(--bf-flame-primary);
+  border-radius: 16px;
+  padding: 20px 28px;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 36px -8px rgba(0, 0, 0, 0.6), 0 0 24px var(--bf-flame-glow);
+  backdrop-filter: blur(12px);
+}
+
+.bf-logo-img {
+  width: 78px;
+  height: 78px;
+  filter: drop-shadow(0 0 12px rgba(255, 107, 0, 0.5));
+  animation: pulse-glow 3.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(255, 107, 0, 0.4)); }
+  50% { filter: drop-shadow(0 0 18px rgba(255, 140, 0, 0.75)); }
+}
+
+.bf-brand-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  background: linear-gradient(90deg, #ffffff 0%, #ffbe53 60%, #ff7a00 100%);
+  -webkit-background-clip: text;
+  background-clip:text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.bf-brand-subtitle {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin: 4px 0 0 0;
+  font-weight: 400;
+}
+
+/* Quick Status Pills */
+.bf-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bf-pill-green {
+  background: var(--bf-green-bg);
+  color: #34d399;
+  border: 1px solid var(--bf-green-border);
+}
+
+.bf-pill-yellow {
+  background: var(--bf-yellow-bg);
+  color: #fbbf24;
+  border: 1px solid var(--bf-yellow-border);
+}
+
+.bf-pill-red {
+  background: var(--bf-red-bg);
+  color: #f87171;
+  border: 1px solid var(--bf-red-border);
+}
+
+.bf-pill-offline {
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  border: 1px solid #475569;
+}
+
+.bf-pill-sync {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border: 1px solid #2563eb;
+  animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; box-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+}
+
+/* Match Cards */
+.bf-match-card {
+  background: var(--bf-surface-card);
+  border: 1px solid var(--bf-border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 18px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.bf-match-card:hover {
+  transform: translateY(-2px);
+  border-color: #475569;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.bf-match-card.card-green {
+  border-left: 6px solid var(--bf-green);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, var(--bf-surface-card) 60%);
+}
+
+.bf-match-card.card-yellow {
+  border-left: 6px solid var(--bf-yellow);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, var(--bf-surface-card) 60%);
+}
+
+.bf-match-card.card-red {
+  border-left: 6px solid var(--bf-red);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.05) 0%, var(--bf-surface-card) 60%);
+}
+
+/* Explainability Factor Badges */
+.bf-factor-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 6px 0;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.bf-factor-pro {
+  background: rgba(16, 185, 129, 0.09);
+  color: #a7f3d0;
+  border-left: 3px solid #10b981;
+}
+
+.bf-factor-con {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border-left: 3px solid #ef4444;
+}
+
+.bf-factor-pending {
+  background: rgba(245, 158, 11, 0.08);
+  color: #fde68a;
+  border-left: 3px solid #f59e0b;
+}
+
+/* Stat Metrics Box */
+.bf-stat-box {
+  background: linear-gradient(180deg, var(--bf-surface-card) 0%, #101623 100%);
+  border: 1px solid var(--bf-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.bf-stat-val {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.bf-stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--bf-text-muted);
+}
+
+/* Timeline Sighting Vector Box */
+.bf-timeline-node {
+  border-left: 2px dashed #ff7a00;
+  padding-left: 18px;
+  margin-left: 10px;
+  position: relative;
+  padding-bottom: 16px;
+}
+
+.bf-timeline-dot {
+  position: absolute;
+  left: -7px;
+  top: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff7a00;
+  box-shadow: 0 0 8px #ff7a00;
+}
+
+/* Lab Swab Metric Pill */
+.bf-swab-metric {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.bf-badge-privacy {
+  display: inline-block;
+  background: #1e1b4b;
+  color: #c7d2fe;
+  border: 1px solid #4338ca;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+/* Custom button tweaks */
+button[kind="primary"] {
+  background: linear-gradient(90deg, #ea580c 0%, #ff7a00 100%) !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(234, 88, 12, 0.4) !important;
+}
+
+button[kind="primary"]:hover {
+  background: linear-gradient(90deg, #c2410c 0%, #ea580c 100%) !important;
+  transform: translateY(-1px) !important;
+}
+

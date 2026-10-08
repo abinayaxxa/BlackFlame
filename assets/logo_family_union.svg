@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="shieldGrad" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#1e182e"/>
+      <stop offset="70%" stop-color="#0c0a14"/>
+      <stop offset="100%" stop-color="#050408"/>
+    </radialGradient>
+
+    <!-- Flame Gradient -->
+    <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ff3b00"/>
+      <stop offset="35%" stop-color="#ff7a00"/>
+      <stop offset="70%" stop-color="#ffbe1a"/>
+      <stop offset="100%" stop-color="#fff4b8"/>
+    </linearGradient>
+
+    <!-- Inner Flame Gradient -->
+    <linearGradient id="innerFlameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#120c1f"/>
+      <stop offset="50%" stop-color="#281545"/>
+      <stop offset="100%" stop-color="#ff9d00"/>
+    </linearGradient>
+
+    <!-- Aura Glow -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <radialGradient id="unionGold" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="40%" stop-color="#fed7aa"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Outer Protective Shield -->
+  <path d="M 200 15 C 310 15 375 70 375 185 C 375 295 270 365 200 390 C 130 365 25 295 25 185 C 25 70 90 15 200 15 Z"
+        fill="url(#shieldGrad)" stroke="#ff8c00" stroke-width="3" stroke-opacity="0.6"/>
+
+  <!-- Flame Halo Ring -->
+  <circle cx="200" cy="190" r="145" fill="none" stroke="#ff7700" stroke-width="1.5" stroke-dasharray="4 8" stroke-opacity="0.4"/>
+
+  <!-- Protective Outer Flame (Black Flame Beacon) -->
+  <path d="M 200 45 
+           C 225 95 275 140 275 195 
+           C 275 245 240 280 200 280 
+           C 160 280 125 245 125 195 
+           C 125 140 175 95 200 45 Z" 
+        fill="url(#flameGrad)" filter="url(#glow)" opacity="0.95"/>
+
+  <!-- Flame Inner Core (The Dark Ember) -->
+  <path d="M 200 95 
+           C 215 130 250 160 250 205 
+           C 250 240 225 265 200 265 
+           C 175 265 150 240 150 205 
+           C 150 160 185 130 200 95 Z" 
+        fill="url(#innerFlameGrad)"/>
+
+  <!-- Reunited Family Silhouettes in the Center (Family Union Emblem) -->
+  <!-- Father / Adult 1 (Left) -->
+  <g fill="url(#unionGold)">
+    <!-- Father Head -->
+    <circle cx="165" cy="180" r="13" />
+    <!-- Father Body & Arm -->
+    <path d="M 152 200 C 152 195 178 195 178 200 L 180 245 C 180 247 150 247 150 245 Z" />
+    <!-- Father Holding Hand toward Child -->
+    <path d="M 175 210 Q 185 220 190 225" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Mother / Adult 2 (Right) -->
+    <!-- Mother Head -->
+    <circle cx="235" cy="182" r="12" />
+    <!-- Mother Body & Arm -->
+    <path d="M 222 200 C 222 195 248 195 248 200 L 250 245 C 250 247 220 247 220 245 Z" />
+    <!-- Mother Holding Hand toward Child -->
+    <path d="M 225 210 Q 215 220 210 225" stroke="#f59e0b" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Child (Center Reunited) -->
+    <!-- Child Head -->
+    <circle cx="200" cy="202" r="9" />
+    <!-- Child Body -->
+    <path d="M 191 216 C 191 213 209 213 209 216 L 211 247 C 211 248 189 248 189 247 Z" />
+    <!-- Child Hands reached out to both parents -->
+    <circle cx="190" cy="225" r="3.5" fill="#fff"/>
+    <circle cx="210" cy="225" r="3.5" fill="#fff"/>
+  </g>
+
+  <!-- Reuniting Hands / Arc of Hearth Protection -->
+  <path d="M 120 260 C 160 305 240 305 280 260" 
+        fill="none" stroke="#ffaa00" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+  <path d="M 140 275 C 175 310 225 310 260 275" 
+        fill="none" stroke="#ff5500" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Radiating Stars of Hope -->
+  <polygon points="200,60 203,69 212,70 205,76 207,85 200,80 193,85 195,76 188,70 197,69" fill="#fff" opacity="0.9"/>
+  <circle cx="95" cy="150" r="2.5" fill="#ffbe1a" opacity="0.8"/>
+  <circle cx="305" cy="150" r="2.5" fill="#ffbe1a" opacity="0.8"/>
+  <circle cx="110" cy="220" r="2" fill="#ff7a00" opacity="0.7"/>
+  <circle cx="290" cy="220" r="2" fill="#ff7a00" opacity="0.7"/>
+
+  <!-- Lower Banner Arch -->
+  <text x="200" y="340" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="19" fill="#ffb433" letter-spacing="3.5">
+    BLACK FLAME
+  </text>
+  <text x="200" y="362" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="12" fill="#e2e8f0" letter-spacing="2" opacity="0.85">
+    FAMILY UNION REUNIFICATION
+  </text>
+</svg>
+
