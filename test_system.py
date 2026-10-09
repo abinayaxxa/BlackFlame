@@ -26,6 +26,7 @@ from database.local_db import (
     save_verification, get_pending_sync_items
 )
 from database.sync_manager import get_sync_status_summary
+from security.access_control import require_access, STAFF_ROLES
 
 
 class TestBlackFlameCore(unittest.TestCase):
@@ -162,6 +163,21 @@ class TestBlackFlameCore(unittest.TestCase):
         
         pending = get_pending_sync_items()
         self.assertTrue(any(c["id"] == saved["id"] for c in pending["cases"]))
+
+    def test_10_access_control_and_role_enforcement(self):
+        """Only permitted roles may access sensitive operational modules."""
+        family_user = {"account_type": "family", "full_name": "Priya Kumar"}
+        staff_admin = {"account_type": "staff", "role": "SYSTEM_ADMINISTRATOR"}
+        hospital_staff = {"account_type": "staff", "role": "HOSPITAL_STAFF"}
+        rescue_staff = {"account_type": "staff", "role": "RESCUE_CAMP_STAFF"}
+
+        self.assertTrue(require_access(family_user, allowed_account_types={"family"}))
+        self.assertFalse(require_access(family_user, allowed_account_types={"staff"}))
+        self.assertTrue(require_access(staff_admin, allowed_roles={"SYSTEM_ADMINISTRATOR"}))
+        self.assertTrue(require_access(hospital_staff, allowed_roles={"HOSPITAL_STAFF", "SYSTEM_ADMINISTRATOR"}))
+        self.assertTrue(require_access(rescue_staff, allowed_roles=STAFF_ROLES))
+
+        self.assertFalse(require_access({"account_type": "family"}, allowed_roles={"HOSPITAL_STAFF"}))
 
 
 if __name__ == "__main__":

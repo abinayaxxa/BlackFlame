@@ -15,10 +15,19 @@ import pydeck as pdk
 import streamlit as st
 
 import config
+from security.access_control import (
+    STAFF_ROLES,
+    FAMILY_ACCOUNT_TYPE,
+    get_account_role,
+    require_access,
+)
 from database.local_db import (
     get_all_cases, get_case_by_code, save_case, save_sighting,
     save_voice_record, save_swab_record, save_verification,
-    get_pending_sync_items
+    get_pending_sync_items, authenticate_user, create_family_member,
+    create_staff_account, generate_family_questions, evaluate_family_response,
+    save_family_verification_record, get_family_verification_records,
+    add_audit_log
 )
 from database.supabase_client import check_supabase_health
 from database.sync_manager import get_sync_status_summary, execute_full_synchronization
@@ -63,6 +72,50 @@ ss.setdefault("selected_role", "Camp Field Responder")
 ss.setdefault("last_sync_msg", None)
 ss.setdefault("active_tab", "Command Dashboard")
 ss.setdefault("verification_case_pair", None)
+ss.setdefault("auth_user", None)
+ss.setdefault("auth_message", "")
+
+
+def require_authenticated_session(message: str = "Please log in to access this module."):
+    if not ss.auth_user:
+        st.warning(message)
+        st.stop()
+
+
+def require_module_access(allowed_roles=None, allowed_account_types=None, message: str = "Your current account does not have permission for this module."):
+    require_authenticated_session()
+    if not require_access(ss.auth_user, allowed_roles=allowed_roles, allowed_account_types=allowed_account_types):
+        st.warning(message)
+        st.stop()
+
+
+def normalize_role_for_ui(auth_user: Optional[Dict[str, Any]] = None) -> str:
+    if not auth_user:
+        return ss.selected_role
+    if auth_user.get("account_type") == "family":
+        return "Family / Guardian"
+    role = (auth_user.get("role") or "").upper()
+    if role == "SYSTEM_ADMINISTRATOR":
+        return "Relief Authority / Admin"
+    if role == "HOSPITAL_STAFF":
+        return "Medical & Lab Officer"
+    if role == "RESCUE_CAMP_STAFF":
+        return "Camp Field Responder"
+    return ss.selected_role
+
+
+def save_uploaded_file(uploaded_file, folder: str) -> str:
+    if uploaded_file is None:
+        return ""
+    if uploaded_file.size > 5 * 1024 * 1024:
+        raise ValueError("File exceeds 5MB limit.")
+    upload_dir = Path(__file__).resolve().parent / "uploads" / folder
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = f"{uuid.uuid4().hex}_{Path(uploaded_file.name).name}"
+    destination = upload_dir / safe_name
+    with destination.open("wb") as f:
+        f.write(uploaded_file.getvalue())
+    return str(destination)
 
 
 # ---------------- Header & Branding Component ----------------
@@ -101,18 +154,87 @@ def render_header():
     """, unsafe_allow_html=True)
 
 
+# ---------------- Secure Authentication Panel ----------------
+def render_auth_panel():
+    with st.sidebar:
+        st.markdown("### 🔐 Secure Access")
+        if ss.auth_user:
+            user = ss.auth_user
+            role_label = normalize_role_for_ui(user)
+            st.success(f"Logged in as {user.get('full_name') or user.get('email')}")
+            st.caption(f"Role: {role_label}")
+            if st.button("Logout", use_container_width=True, type="secondary"):
+                ss.auth_user = None
+                ss.selected_role = "Camp Field Responder"
+                ss.auth_message = "Logged out successfully."
+                st.rerun()
+            return
+
+        login_as = st.selectbox("Login as", ["Family Member", "System Administrator", "Hospital Staff", "Rescue Camp Staff"], index=0)
+        with st.form("secure_login_form"):
+            email = st.text_input("Email", placeholder="name@example.com")
+            password = st.text_input("Password", type="password", placeholder="Password")
+            submit = st.form_submit_button("Login", use_container_width=True, type="primary")
+
+        if submit:
+            account_type = None
+            if login_as == "Family Member":
+                account_type = "family"
+            elif login_as == "System Administrator":
+                account_type = "staff"
+            elif login_as == "Hospital Staff":
+                account_type = "staff"
+            else:
+                account_type = "staff"
+
+            user = authenticate_user(email.strip(), password, account_type=account_type)
+            if not user:
+                st.error("Invalid email or password for the selected account type.")
+                return
+            ss.auth_user = user
+            ss.selected_role = normalize_role_for_ui(user)
+            ss.auth_message = f"Welcome back, {user.get('full_name') or user.get('email')}"
+            st.success(ss.auth_message)
+            st.rerun()
+
+        st.caption("Demo accounts: admin@blackflame.local / Admin@123")
+        st.caption("family@blackflame.local / Family@123")
+
+        with st.expander("Create family account"):
+            with st.form("family_registration_form"):
+                fam_name = st.text_input("Full Name")
+                fam_email = st.text_input("Email")
+                fam_phone = st.text_input("Phone")
+                fam_relation = st.text_input("Relation to missing person", value="Mother")
+                fam_password = st.text_input("Create password", type="password")
+                fam_submit = st.form_submit_button("Register Family Account")
+            if fam_submit:
+                if fam_name and fam_email and fam_password:
+                    try:
+                        create_family_member(fam_name, fam_email, fam_password, fam_phone, fam_relation)
+                        st.success("Family membership created. You can now log in securely.")
+                    except Exception as exc:
+                        st.error(f"Registration failed: {exc}")
+                else:
+                    st.warning("Please complete the required family-registration fields.")
+
+
 # ---------------- Sidebar Controls ----------------
 def render_sidebar():
     with st.sidebar:
         st.markdown(f"### 🔥 **{config.APP_NAME} Control Center**")
         st.caption("AI Disaster Response & Family Reunification")
-        
+        render_auth_panel()
+        st.divider()
+
         # Role Selector (Enforces Privacy Protection)
         ss.selected_role = st.selectbox(
             "👤 Active User Role",
             ["Camp Field Responder", "Family / Guardian", "Medical & Lab Officer", "Relief Authority / Admin"],
-            index=0
+            index=["Camp Field Responder", "Family / Guardian", "Medical & Lab Officer", "Relief Authority / Admin"].index(ss.selected_role) if ss.selected_role in ["Camp Field Responder", "Family / Guardian", "Medical & Lab Officer", "Relief Authority / Admin"] else 0
         )
+        if ss.auth_user:
+            ss.selected_role = normalize_role_for_ui(ss.auth_user)
         
         st.divider()
         
@@ -134,7 +256,7 @@ def render_sidebar():
             
         if sync_info["has_pending_items"]:
             st.info(f"⏳ **{sync_info['total_pending']} record(s)** waiting for sync to Supabase.")
-            if st.button("🚀 Sync to Supabase PostgreSQL Now", use_container_width=True, type="primary"):
+            if st.button("🚀 Sync to Supabase PostgreSQL Now", width="stretch", type="primary"):
                 with st.spinner("Synchronizing with Supabase PostgreSQL..."):
                     res = execute_full_synchronization()
                     ss.last_sync_msg = res["message"]
@@ -168,7 +290,59 @@ def render_decision_badge(decision_level: str, score: float):
 def render_tab_dashboard():
     st.subheader("🏛️ Disaster Response Operations Dashboard")
     st.caption("Active Scenario: Wayland River Valley Evacuation Zone | Shelter Alpha to Highway 4")
-    
+
+    if not ss.auth_user:
+        st.info("Please log in using the secure access panel in the sidebar to view protected disaster operations.")
+        return
+
+    if ss.auth_user and ss.auth_user.get("account_type") == "family":
+        st.markdown("### 👨‍👩‍👧 Family Member Access")
+        st.info("Family members can only view safe match percentages and verification progress. Full personal or medical details remain hidden.")
+        missing_cases = get_all_cases("MISSING")
+        if not missing_cases:
+            st.info("No case records are currently available for family review.")
+            return
+        target_case = st.selectbox("Select a case for review", missing_cases, format_func=lambda c: f"{c.get('case_code')} | {c.get('declared_name') or 'Protected Person'}")
+        candidate_pool = get_all_cases("UNIDENTIFIED")
+        results = match_candidate_against_database(target_case, candidate_pool)
+        if not results:
+            st.info("No candidate matches are currently available for this report.")
+            return
+        for result in results[:3]:
+            lvl = result["decision_level"]
+            score = result["numerical_score"]
+            if score < 0.35:
+                continue
+            candidate = next((row for row in candidate_pool if row.get("case_code") == result["case_b_id"] or row.get("id") == result["case_b_id"]), None)
+            if candidate is None:
+                continue
+            st.markdown(f"<div class='bf-match-card card-{lvl.lower() if lvl.lower() in ('green','yellow','red') else 'yellow'}'><strong>Possible Match:</strong> {result['case_b_id']}<br><strong>Match Percentage:</strong> {score*100:.1f}%<br><strong>Summary:</strong> Age ~{candidate.get('age', 'Unknown')} | Gender {candidate.get('gender', 'Unknown')} | Clothing {candidate.get('clothing_description', 'Not recorded')}<br><em>Only a safe summary is shown until authorized verification is completed.</em></div>", unsafe_allow_html=True)
+        st.divider()
+        family_case = target_case
+        questions = generate_family_questions(family_case)
+        user_answers = []
+        for q in questions:
+            user_answer = st.text_input(q, key=f"family_q_{q}")
+            user_answers.append(user_answer)
+        if st.button("Submit Family Verification", type="primary"):
+            assessment = evaluate_family_response(family_case, user_answers)
+            save_family_verification_record(ss.auth_user['id'], family_case['id'], assessment['score'], assessment['status'], "Family verification", " | ".join(user_answers), "Private family verification answer")
+            if assessment["status"] == "AWAITING_VERIFICATION":
+                st.warning("Verification is still pending. This record is not confirmed as a match.")
+            else:
+                st.success(f"Verification status: {assessment['status']} | Match confidence: {assessment['score']*100:.1f}%")
+        return
+
+    if ss.auth_user and ss.auth_user.get("account_type") == "staff":
+        role = (ss.auth_user.get("role") or "").upper()
+        st.markdown("### 🛡️ Role-Based Staff Summary")
+        if role == "SYSTEM_ADMINISTRATOR":
+            st.markdown("**Administrator dashboard:** staff access, case review, audit tracking, and verification oversight.")
+        elif role == "HOSPITAL_STAFF":
+            st.markdown("**Hospital dashboard:** unidentified intake, photograph/audio upload, and authorized clinical review.")
+        elif role == "RESCUE_CAMP_STAFF":
+            st.markdown("**Rescue camp dashboard:** missing and rescued person updates, location tracking, and safe candidate searching.")
+
     missing_cases = get_all_cases("MISSING")
     unidentified_cases = get_all_cases("UNIDENTIFIED")
     
@@ -300,7 +474,7 @@ def render_tab_dashboard():
             tooltip={"text": "{name}"},
             map_style="mapbox://styles/mapbox/dark-v10"
         )
-        st.pydeck_chart(deck, use_container_width=True)
+        st.pydeck_chart(deck, width="stretch")
         
         st.markdown("""
         **Sighting Legend:**
@@ -311,7 +485,11 @@ def render_tab_dashboard():
 
 # ---------------- TAB 2: ATTRIBUTE MATCH DISCOVERY (ZERO-NAME SEARCH) ----------------
 def render_tab_discovery():
+    require_authenticated_session("Please log in to use the discovery module.")
     st.subheader("🔍 Attribute-First Match Discovery")
+    if (ss.auth_user and ss.auth_user.get("account_type") == "family") or ss.selected_role == "Family / Guardian":
+        st.warning("Family members can review only safe match percentages and non-sensitive summaries. Full personal or medical information remains hidden until an authorized verification process is completed.")
+
     st.markdown("""
     > [!IMPORTANT]
     > **Zero Name-Dependency**: In disaster environments, names are frequently misspelled, unstated due to trauma/amnesia, or withheld for child privacy.
@@ -325,15 +503,16 @@ def render_tab_discovery():
             q_age_tol = st.slider("Age Margin / Uncertainty (± Years)", 0, 15, 3)
             q_gender = st.selectbox("Gender", ["Any", "M", "F", "Other"])
         with col2:
-            q_color = st.selectbox("Clothes Color Observed", ["Any"] + config.CLOTHING_COLORS)
-            q_item = st.selectbox("Clothes Garment Type", ["Any"] + config.CLOTHING_ITEMS)
+            q_color = st.text_input("Clothes Color Observed", value="", placeholder="e.g. red, blue, black")
+            q_item = st.text_input("Clothes Garment Type", value="", placeholder="e.g. shirt, kurta, saree")
             q_blood = st.selectbox("Blood Group (if known)", ["Any"] + config.BLOOD_GROUPS)
         with col3:
             q_place = st.selectbox("Last-Seen Area / Landmark", ["Any"] + list(LANDMARK_COORDINATES.keys()))
             q_direction = st.selectbox("Direction of Movement Observed", ["Any"] + config.CARDINAL_DIRECTIONS)
             q_relatives = st.text_input("Known Relatives / Kinship (e.g., Ramesh, Kamala)", placeholder="Uncle Ramesh")
             
-        q_marks = st.multiselect("Distinct Physical Marks / Scars", config.PHYSICAL_MARKS, default=["scar_left_arm"])
+        q_marks_raw = st.text_input("Distinct Physical Marks / Scars", value="", placeholder="e.g. scar_left_arm, mole_face, tattoo_wrist")
+        q_marks = [m.strip() for m in q_marks_raw.split(',') if m.strip()] if q_marks_raw else []
 
     # Build Synthetic Query Case
     query_case = {
@@ -387,54 +566,77 @@ def render_tab_discovery():
         
         # Privacy protection: Anonymize declared name unless authorized
         is_officer = ss.selected_role in ("Camp Field Responder", "Medical & Lab Officer", "Relief Authority / Admin")
+        is_family_user = (ss.auth_user and ss.auth_user.get("account_type") == "family") or ss.selected_role == "Family / Guardian"
         disp_name = cand_rec.get("declared_name", "Anonymous Found Record") if is_officer else "Protected Person ID (Masked for Privacy)"
+        if is_family_user:
+            disp_name = "Protected Person ID (Masked for Privacy)"
         
-        st.markdown(f"""
-        <div class="{card_class}">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="font-size:1.15rem; font-weight:800;">
-                    Unidentified Candidate: <code>{cand_rec.get('case_code')}</code>
-                </span>
-                {render_decision_badge(level, score)}
+        if is_family_user:
+            summary_text = "Age range and non-sensitive clothing summary only. Full medical or contact details are hidden."
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:1.15rem; font-weight:800;">Candidate: <code>{cand_rec.get('case_code')}</code></span>
+                    {render_decision_badge(level, score)}
+                </div>
+                <div style="font-size:0.9rem; color:#cbd5e1; margin-bottom:6px;">
+                    <strong>Safe Match Summary:</strong> Approximate age range {cand_rec.get('age', 'N/A')}, general clothing description available, pending authorized verification.
+                </div>
+                <div style="font-size:0.88rem; color:#94a3b8; margin-bottom:10px;">{summary_text}</div>
             </div>
-            <div style="font-size:0.9rem; color:#cbd5e1; margin-bottom:6px;">
-                <strong>Demographics:</strong> Est. Age: ~{cand_rec.get('age', 'Unknown')} | Gender: {cand_rec.get('gender', 'Unknown')} | Blood: {cand_rec.get('blood_group', 'Not Tested')} | Condition: <em>{cand_rec.get('condition', 'Stable')}</em>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="{card_class}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span style="font-size:1.15rem; font-weight:800;">
+                        Unidentified Candidate: <code>{cand_rec.get('case_code')}</code>
+                    </span>
+                    {render_decision_badge(level, score)}
+                </div>
+                <div style="font-size:0.9rem; color:#cbd5e1; margin-bottom:6px;">
+                    <strong>Demographics:</strong> Est. Age: ~{cand_rec.get('age', 'Unknown')} | Gender: {cand_rec.get('gender', 'Unknown')} | Blood: {cand_rec.get('blood_group', 'Not Tested')} | Condition: <em>{cand_rec.get('condition', 'Stable')}</em>
+                </div>
+                <div style="font-size:0.88rem; color:#94a3b8; margin-bottom:6px;">
+                    <strong>Clothing:</strong> {cand_rec.get('clothing_description', 'Standard intake clothing')} | <strong>Marks:</strong> {', '.join(cand_rec.get('marks', [])) or 'None recorded'}
+                </div>
+                <div style="font-size:0.88rem; color:#94a3b8; margin-bottom:10px;">
+                    📍 <strong>Location / Direction:</strong> Found at <em>{cand_rec.get('found_place', 'Relief shelter')}</em> (Direction: {cand_rec.get('direction_of_movement', 'Stationary')})
+                </div>
             </div>
-            <div style="font-size:0.88rem; color:#94a3b8; margin-bottom:6px;">
-                <strong>Clothing:</strong> {cand_rec.get('clothing_description', 'Standard intake clothing')} | <strong>Marks:</strong> {', '.join(cand_rec.get('marks', [])) or 'None recorded'}
-            </div>
-            <div style="font-size:0.88rem; color:#94a3b8; margin-bottom:10px;">
-                📍 <strong>Location / Direction:</strong> Found at <em>{cand_rec.get('found_place', 'Relief shelter')}</em> (Direction: {cand_rec.get('direction_of_movement', 'Stationary')})
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
         
-        with st.expander(f"📊 Detailed Match Factors & Conflict Audit ({cand_rec.get('case_code')})"):
-            c_left, c_right = st.columns(2)
-            with c_left:
-                st.markdown("**✓ Supporting Evidence:**")
-                for s in exp.get("supporting_factors", []):
-                    st.markdown(f'<div class="bf-factor-item bf-factor-pro">✓ {s}</div>', unsafe_allow_html=True)
-            with c_right:
-                if exp.get("conflicting_factors"):
-                    st.markdown("**✗ Contradictory Evidence:**")
-                    for c in exp.get("conflicting_factors", []):
-                        st.markdown(f'<div class="bf-factor-item bf-factor-con">✗ {c}</div>', unsafe_allow_html=True)
-                if exp.get("pending_factors"):
-                    st.markdown("**⚠️ Pending Verification:**")
-                    for p in exp.get("pending_factors", []):
-                        st.markdown(f'<div class="bf-factor-item bf-factor-pending">⚠️ {p}</div>', unsafe_allow_html=True)
-                        
-            st.caption(f"**Action Recommendation:** {exp.get('status_guidance')}")
-            
-            if level in (config.DECISION_GREEN, config.DECISION_YELLOW):
-                if st.button(f"⚖️ Review in Human Verification Desk ({cand_rec.get('case_code')})", key=f"sel_disc_{cand_rec.get('case_code')}"):
-                    ss.verification_case_pair = (query_case, cand_rec, res)
+        if not is_family_user:
+            with st.expander(f"📊 Detailed Match Factors & Conflict Audit ({cand_rec.get('case_code')})"):
+                c_left, c_right = st.columns(2)
+                with c_left:
+                    st.markdown("**✓ Supporting Evidence:**")
+                    for s in exp.get("supporting_factors", []):
+                        st.markdown(f'<div class="bf-factor-item bf-factor-pro">✓ {s}</div>', unsafe_allow_html=True)
+                with c_right:
+                    if exp.get("conflicting_factors"):
+                        st.markdown("**✗ Contradictory Evidence:**")
+                        for c in exp.get("conflicting_factors", []):
+                            st.markdown(f'<div class="bf-factor-item bf-factor-con">✗ {c}</div>', unsafe_allow_html=True)
+                    if exp.get("pending_factors"):
+                        st.markdown("**⚠️ Pending Verification:**")
+                        for p in exp.get("pending_factors", []):
+                            st.markdown(f'<div class="bf-factor-item bf-factor-pending">⚠️ {p}</div>', unsafe_allow_html=True)
+                            
+                st.caption(f"**Action Recommendation:** {exp.get('status_guidance')}")
+                
+                if level in (config.DECISION_GREEN, config.DECISION_YELLOW):
+                    if st.button(f"⚖️ Review in Human Verification Desk ({cand_rec.get('case_code')})", key=f"sel_disc_{cand_rec.get('case_code')}"):
+                        ss.verification_case_pair = (query_case, cand_rec, res)
                     st.success("Loaded candidate pair into Human Verification Desk! Switch to Tab 6.")
 
 
 # ---------------- TAB 3: REGISTER CASE (OFFLINE-FIRST) ----------------
 def render_tab_registration():
+    require_module_access(
+        allowed_roles=STAFF_ROLES,
+        message="Access denied: only authorized staff can register cases.",
+    )
     st.subheader("📝 Register Case (Offline-First Capable)")
     
     is_offline = ss.simulated_offline or not check_supabase_health()["online"]
@@ -460,12 +662,13 @@ def render_tab_registration():
             gender_val = st.selectbox("Gender", ["M", "F", "Other", "Unknown"])
         with c2:
             blood_val = st.selectbox("Blood Group (optional)", [""] + config.BLOOD_GROUPS)
-            color_val = st.selectbox("Clothes Primary Color", config.CLOTHING_COLORS)
+            color_val = st.text_input("Clothes Primary Color", value="", placeholder="e.g. red, blue, black")
         with c3:
-            item_val = st.selectbox("Clothes Garment Item", config.CLOTHING_ITEMS)
+            item_val = st.text_input("Clothes Garment Item", value="", placeholder="e.g. shirt, kurta, saree")
             cond_val = st.selectbox("Current Condition", ["STABLE", "CONSCIOUS", "INJURED", "MEMORY_LOSS", "UNCONSCIOUS"])
             
-        marks_val = st.multiselect("Distinctive Identification Marks / Scars", config.PHYSICAL_MARKS)
+        marks_raw = st.text_input("Distinctive Identification Marks / Scars", value="", placeholder="e.g. scar left arm, mole face, tattoo wrist")
+        marks_val = [m.strip() for m in marks_raw.split(',') if m.strip()] if marks_raw else []
         phys_notes = st.text_area("Physical Build & Distinguishing Notes", placeholder="e.g. Slim build, speaks with regional dialect, walking with slight limp")
         
         st.divider()
@@ -594,6 +797,10 @@ def render_tab_registration():
 
 # ---------------- TAB 4: TIMELINE, LOCATION & DIRECTION TRACKER ----------------
 def render_tab_timeline():
+    require_module_access(
+        allowed_roles=STAFF_ROLES,
+        message="Access denied: timeline tracking is restricted to authorized staff.",
+    )
     st.subheader("🗺️ Last-Seen + Time + Direction Sighting Continuity Tracker")
     st.markdown("""
     > [!NOTE]
@@ -713,6 +920,10 @@ def render_tab_timeline():
 
 # ---------------- TAB 5: VOICE & SWAB BIOLOGICAL LAB ----------------
 def render_tab_lab():
+    require_module_access(
+        allowed_roles={"SYSTEM_ADMINISTRATOR", "HOSPITAL_STAFF"},
+        message="Access denied: only medical and administrative staff can access laboratory evidence.",
+    )
     st.subheader("🔬 Voice & Swab Biological Verification Laboratory")
     st.markdown("""
     > [!IMPORTANT]
@@ -810,6 +1021,10 @@ def render_tab_lab():
 
 # ---------------- TAB 6: HUMAN VERIFICATION & REUNIFICATION DESK ----------------
 def render_tab_verification():
+    require_module_access(
+        allowed_roles=STAFF_ROLES,
+        message="Access denied: only authorized staff can perform verification workflows.",
+    )
     st.subheader("⚖️ Human Verification & Reunification Desk")
     st.markdown("""
     > [!IMPORTANT]
@@ -958,6 +1173,10 @@ def render_tab_verification():
 
 # ---------------- TAB 7: OFFLINE MODE & SUPABASE SYNC CENTER ----------------
 def render_tab_sync():
+    require_module_access(
+        allowed_roles={"SYSTEM_ADMINISTRATOR"},
+        message="Access denied: only the system administrator can manage cloud synchronization.",
+    )
     st.subheader("⚡ Offline Mode & Supabase PostgreSQL Sync Center")
     st.markdown("""
     > [!NOTE]
@@ -980,7 +1199,7 @@ def render_tab_sync():
     st.markdown("#### 🔄 **Pending Sync Queue (Stored Locally in SQLite)**")
     if pending_items["cases"]:
         df_p_cases = pd.DataFrame(pending_items["cases"])[["case_code", "case_type", "age", "gender", "origin_area", "sync_status", "created_at"]]
-        st.dataframe(df_p_cases, use_container_width=True)
+        st.dataframe(df_p_cases, width="stretch")
     else:
         st.info("No cases currently pending synchronization.")
         
@@ -991,7 +1210,7 @@ def render_tab_sync():
         st.markdown("#### Trigger Cloud Synchronization")
         st.caption("Pushes pending cases to Supabase PostgreSQL, preserves local timestamps, and triggers automated match re-evaluation.")
         
-        if st.button("🚀 Execute Supabase Cloud Sync", type="primary", use_container_width=True):
+        if st.button("🚀 Execute Supabase Cloud Sync", type="primary", width="stretch"):
             if ss.simulated_offline:
                 st.warning("⚠️ Simulation offline mode is currently turned ON in the sidebar. Please disable the offline simulation toggle to test network sync.")
             else:
